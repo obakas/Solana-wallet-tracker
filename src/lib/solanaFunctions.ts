@@ -70,7 +70,7 @@ export async function detectMemecoins(address: string) {
     }
 
     output += memecoinCount === 0
-        ? '\nNo memecoins found in this wallet.'
+        ? `\nNo memecoins found in this wallet.`
         : `\n✅ Found ${memecoinCount} memecoin(s).`;
 
     return output;

@@ -214,7 +214,8 @@ export default function SolanaToolUI() {
         params.append('numTx', numTx);
         params.append('depth', '3');
 
-        let report = `🧾 Solana Wallet Summary Report\n📍 Wallet: ${address}\n🕒 Date: ${new Date().toLocaleString()}\n\n`;
+        // Replaced emojis with plain text for PDF compatibility
+        let report = `Report: Solana Wallet Summary Report\nWallet: ${address}\nDate: ${new Date().toLocaleString()}\n\n`;
 
         try {
             for (const endpoint of endpoints) {
@@ -222,35 +223,35 @@ export default function SolanaToolUI() {
                 const data = await res.json();
 
                 if (!res.ok) {
-                    report += `❌ ${endpoint}: ${data.error}\n\n`;
+                    report += `Error ${endpoint}: ${data.error}\n\n`;
                     continue;
                 }
 
                 const result = data.result;
 
-                // 💰 Token Balances
+                // Token Balances
                 if (endpoint === 'token-balances') {
-                    report += `📦 TOKEN BALANCES\nSOL Balance: ${result.nativeBalance} SOL\n`;
-                    result.tokenAccounts?.forEach((token: any) => {
+                    report += `TOKEN BALANCES\nSOL Balance: ${result.nativeBalance} SOL\n`;
+                    result.tokenAccounts.forEach((token: any) => {
                         report += `- ${token.symbol || 'N/A'}: ${token.amount}\n`;
                     });
                     report += `\n`;
                 }
 
-                // 🐸 Memecoins
+                // Memecoins
                 else if (endpoint === 'detect-memecoins') {
                     const lines = result.split('\n').filter(Boolean);
-                    const memecoins = lines.filter((line: string | string[]) => line.includes('🚀'));
-                    report += `🐸 MEMECOIN SCAN\nFound ${memecoins.length} memecoin(s)\n`;
+                    const memecoins = lines.filter((line: string | string[]) => line.includes('Memecoin')); // Replaced 🚀 with text
+                    report += `MEMECOIN SCAN\nFound ${memecoins.length} memecoin(s)\n`;
                     memecoins.forEach((_line: any, i: number) => {
                         report += `- ${lines[i + 1]?.split(':')[1]?.trim() || 'Unknown Token'}\n`;
                     });
                     report += `\n`;
                 }
 
-                // 📜 Transactions
+                // Transactions
                 else if (endpoint === 'transactions') {
-                    report += `📜 TRANSACTION SUMMARY\nTotal Scanned: ${result.length}\n`;
+                    report += `TRANSACTION SUMMARY\nTotal Scanned: ${result.length}\n`;
                     const programMap: Record<string, number> = {};
                     result.forEach((tx: any) => {
                         tx.instructions.forEach((ix: any) => {
@@ -264,18 +265,18 @@ export default function SolanaToolUI() {
                     report += `\n`;
                 }
 
-                // 🔍 Trace Flow
+                // Trace Flow
                 else if (endpoint === 'trace') {
-                    report += `🔍 TRACE FLOW\n`;
+                    report += `TRACE FLOW\n`;
                     result.slice(0, 5).forEach((tx: any) => {
                         report += `- ${tx.from.slice(0, 6)} → ${tx.to.slice(0, 6)} | ${tx.token}: ${tx.amount}\n`;
                     });
                     report += result.length > 5 ? `...and ${result.length - 5} more\n\n` : `\n`;
                 }
 
-                // 🏦 Binance Detection
+                // Binance Detection
                 else if (endpoint === 'binance-detection') {
-                    report += `🏦 BINANCE INTERACTIONS\n`;
+                    report += `BINANCE INTERACTIONS\n`;
                     report += `Total: ${result.totalInteractions}\n`;
                     report += `Received: ${result.receivedFromBinance.length}\n`;
                     report += `Sent: ${result.sentToBinance.length}\n\n`;
@@ -284,19 +285,27 @@ export default function SolanaToolUI() {
 
             // 🖨 Export to PDF
             const doc = new jsPDF();
+            const leftMargin = 8;
+            const rightMargin = 8;
+            const pageWidth = doc.internal.pageSize.getWidth(); // Get A4 page width (210mm)
+            const maxWidth = pageWidth - leftMargin - rightMargin; // Usable width (194mm)
             const lines = report.split('\n');
-            let y = 10;
+            let y = 8; // Start at 8mm from top to match margins
+
             lines.forEach((line) => {
-                if (y > 280) {
-                    doc.addPage();
-                    y = 10;
-                }
-                doc.text(line, 10, y);
-                y += 7;
+                const wrappedLines = doc.splitTextToSize(line, maxWidth);
+                wrappedLines.forEach((wrappedLine: string | string[]) => {
+                    if (y > 280) {
+                        doc.addPage();
+                        y = 8;
+                    }
+                    doc.text(wrappedLine, leftMargin, y);
+                    y += 7;
+                });
             });
 
             doc.save(`solana-wallet-report-${Date.now()}.pdf`);
-            setOutput({ type: 'success', content: '📄 Full report exported successfully!' });
+            setOutput({ type: 'success', content: 'Report: Full report exported successfully!' });
 
         } catch (err: any) {
             console.error('[REPORT_ERROR]', err);
