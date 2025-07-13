@@ -1,0 +1,9 @@
+export const BINANCE_WALLETS = [
+    '3G1KQdZ4M1TuRkN8nnZD5rSYok9BYx7qzg7ftUZjKPGC',
+    '8hojm3QGMGKfBqC52dfWZykVukC33JYXoVgiRk34gz6x',
+    '7MB2qVo9AhukGrtuGFY4YND9oThnVSh97J9uRCP2zUEM',
+    '5jEAvj2d1uKD26LhfPKMJWMBZk5i4WTxD6ZNozYkLh6n',
+    '4nA3sYgyJvYkYrqzNEA8fvMxKRM2Wh8z6jW9eLrL62DV',
+    '3YzYvUNh8NvjNK2sXejWyYWrEKmGBnLypqZJo92nQ7GC',
+    '6p2VPAmR9RhdcmAHBQPLwKoN6WbJ5yFCVa7xtnHqn6uB' // and more...
+];
