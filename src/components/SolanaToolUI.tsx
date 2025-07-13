@@ -1,15 +1,16 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from './ui/Button';
-import { FiCopy, FiExternalLink, FiSearch, FiDollarSign, FiAlertCircle, FiList, FiShare2 } from 'react-icons/fi';
+import { FiCopy, FiExternalLink, FiSearch, FiDollarSign, FiAlertCircle, FiList, FiShare2, FiRefreshCw, FiDownload } from 'react-icons/fi';
+import { FaEthereum, FaBitcoin } from 'react-icons/fa';
+import { SiSolana } from 'react-icons/si';
 import toast from 'react-hot-toast';
 import jsPDF from 'jspdf';
 import PieChart from './PieChart';
 import BarChart from './BarChart';
 import TokenTable from './TokenTable';
 import TraceTable from './TraceTable';
-
 
 export default function SolanaToolUI() {
     const [address, setAddress] = useState('');
@@ -22,10 +23,33 @@ export default function SolanaToolUI() {
     const [txChartData, setTxChartData] = useState<{ name: string; value: number }[]>([]);
     const [binanceChartData, setBinanceChartData] = useState<{ name: string; value: number }[]>([]);
     const [traceData, setTraceData] = useState<any[]>([]);
+    const [recentAddresses, setRecentAddresses] = useState<string[]>([]);
+    const [isMobile, setIsMobile] = useState(false);
 
+    useEffect(() => {
+        const handleResize = () => {
+            setIsMobile(window.innerWidth < 768);
+        };
 
+        handleResize();
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
+    useEffect(() => {
+        const storedAddresses = localStorage.getItem('recentSolanaAddresses');
+        if (storedAddresses) {
+            setRecentAddresses(JSON.parse(storedAddresses));
+        }
+    }, []);
 
+    const saveRecentAddress = (addr: string) => {
+        if (!addr) return;
+
+        const updated = [addr, ...recentAddresses.filter(a => a !== addr)].slice(0, 5);
+        setRecentAddresses(updated);
+        localStorage.setItem('recentSolanaAddresses', JSON.stringify(updated));
+    };
 
     const exportToCSV = () => {
         if (!output?.content) return;
@@ -42,22 +66,34 @@ export default function SolanaToolUI() {
     const exportToPDF = () => {
         if (!output?.content) return;
         const doc = new jsPDF();
+        const leftMargin = 10;
+        const rightMargin = 10;
+        const pageWidth = doc.internal.pageSize.getWidth(); // Get A4 page width (210mm for A4)
+        const maxWidth = pageWidth - leftMargin - rightMargin; // Usable width (190mm)
         const lines = output.content.split('\n');
         let y = 10;
+
         lines.forEach((line) => {
-            if (y > 280) {
-                doc.addPage();
-                y = 10;
-            }
-            doc.text(line, 10, y);
-            y += 7;
+            // Split long lines into chunks that fit within maxWidth
+            const wrappedLines = doc.splitTextToSize(line, maxWidth);
+
+            wrappedLines.forEach((wrappedLine: string | string[]) => {
+                if (y > 280) {
+                    doc.addPage();
+                    y = 10;
+                }
+                doc.text(wrappedLine, leftMargin, y);
+                y += 7;
+            });
         });
+
         doc.save(`solana-report-${activeTab}.pdf`);
     };
 
     const callEndpoint = async (endpoint: string) => {
         setLoading(true);
         setOutput({ type: 'success', content: 'Loading...' });
+        saveRecentAddress(address);
 
         try {
             const params = new URLSearchParams({ address });
@@ -73,7 +109,6 @@ export default function SolanaToolUI() {
                 const text = await res.text();
                 throw new Error(`Invalid JSON from server:\n${text}`);
             }
-
 
             if (res.ok) {
                 if (endpoint === 'token-balances') {
@@ -132,7 +167,6 @@ export default function SolanaToolUI() {
                         { name: 'Sent to Binance', value: sentToBinance.length }
                     ]);
 
-
                     setOutput({ type: 'success', content: summary });
                     setTokenData([]);
                 } else {
@@ -148,7 +182,6 @@ export default function SolanaToolUI() {
         }
     };
 
-
     const copyToClipboard = () => {
         if (output?.content) {
             navigator.clipboard.writeText(output.content);
@@ -162,12 +195,12 @@ export default function SolanaToolUI() {
         }
     };
 
-
     const generateFullReport = async () => {
         if (!address) return;
 
         setLoading(true);
         setOutput({ type: 'success', content: 'Generating full report...' });
+        saveRecentAddress(address);
 
         const endpoints = [
             'token-balances',
@@ -273,173 +306,385 @@ export default function SolanaToolUI() {
         }
     };
 
-
+    const handleAddressSelect = (addr: string) => {
+        setAddress(addr);
+        toast.success(`Address ${addr.slice(0, 6)}...${addr.slice(-4)} loaded`);
+    };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 text-white p-4 md:p-8">
-            <div className="max-w-4xl mx-auto bg-slate-800 rounded-xl shadow-2xl overflow-hidden border border-slate-700">
-                <div className="bg-slate-900 p-6 border-b border-slate-700">
-                    <div className="flex items-center justify-between">
-                        <h1 className="text-2xl font-bold flex items-center gap-2">
-                            <span className="text-purple-400">🪐</span>
-                            Solana Wallet Inspector
-                        </h1>
-                        <button onClick={openInExplorer} disabled={!address} className="flex items-center gap-1 bg-slate-700 hover:bg-slate-600 px-3 py-1 rounded text-sm disabled:opacity-50">
-                            <FiExternalLink size={14} />
-                            View on Solscan
-                        </button>
+        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white p-4 md:p-8">
+            <div className="max-w-6xl mx-auto">
+                {/* Header with Stats */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    <div className="bg-gradient-to-r from-purple-900/50 to-purple-800/30 rounded-xl p-4 border border-purple-800/50 flex items-center">
+                        <div className="bg-purple-600/20 p-3 rounded-lg mr-3">
+                            <SiSolana className="text-purple-300 text-xl" />
+                        </div>
+                        <div>
+                            <p className="text-sm text-purple-200">Solana Network</p>
+                            <p className="font-bold">Mainnet Beta</p>
+                        </div>
                     </div>
-                    <p className="text-slate-400 mt-1">Analyze tokens, memecoins, and transactions</p>
+                    <div className="bg-gradient-to-r from-blue-900/50 to-blue-800/30 rounded-xl p-4 border border-blue-800/50 flex items-center">
+                        <div className="bg-blue-600/20 p-3 rounded-lg mr-3">
+                            <FiDollarSign className="text-blue-300 text-xl" />
+                        </div>
+                        <div>
+                            <p className="text-sm text-blue-200">Token Balances</p>
+                            <p className="font-bold">Multi-chain</p>
+                        </div>
+                    </div>
+                    <div className="bg-gradient-to-r from-green-900/50 to-green-800/30 rounded-xl p-4 border border-green-800/50 flex items-center">
+                        <div className="bg-green-600/20 p-3 rounded-lg mr-3">
+                            <FiShare2 className="text-green-300 text-xl" />
+                        </div>
+                        <div>
+                            <p className="text-sm text-green-200">Transaction Flow</p>
+                            <p className="font-bold">3-level Trace</p>
+                        </div>
+                    </div>
+                    <div className="bg-gradient-to-r from-yellow-900/50 to-yellow-800/30 rounded-xl p-4 border border-yellow-800/50 flex items-center">
+                        <div className="bg-yellow-600/20 p-3 rounded-lg mr-3">
+                            <FiList className="text-yellow-300 text-xl" />
+                        </div>
+                        <div>
+                            <p className="text-sm text-yellow-200">Recent Addresses</p>
+                            <p className="font-bold">{recentAddresses.length} Saved</p>
+                        </div>
+                    </div>
                 </div>
 
-                <div className="p-6 space-y-4">
-                    <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <FiSearch className="text-slate-500" />
+                {/* Main Card */}
+                <div className="bg-slate-800/80 rounded-xl shadow-2xl overflow-hidden border border-slate-700/50 backdrop-blur-sm">
+                    {/* Card Header */}
+                    <div className="bg-gradient-to-r from-slate-900 to-slate-800 p-6 border-b border-slate-700/50">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div>
+                                <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-3">
+                                    <span className="bg-gradient-to-r from-purple-400 to-blue-500 bg-clip-text text-transparent">
+                                        Solana Wallet Inspector
+                                    </span>
+                                </h1>
+                                <p className="text-slate-400 mt-1">Comprehensive analysis tool for Solana wallets and transactions</p>
+                            </div>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={openInExplorer}
+                                    disabled={!address}
+                                    className="flex items-center gap-1 bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-lg text-sm disabled:opacity-50 transition-all duration-200"
+                                >
+                                    <FiExternalLink size={16} />
+                                    {isMobile ? 'Explorer' : 'View on Solscan'}
+                                </button>
+                                <button
+                                    onClick={() => window.location.reload()}
+                                    className="flex items-center gap-1 bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-lg text-sm transition-all duration-200"
+                                >
+                                    <FiRefreshCw size={16} />
+                                    {isMobile ? 'Reset' : 'Reset Tool'}
+                                </button>
+                            </div>
                         </div>
-                        <input
-                            className="w-full bg-slate-700 border border-slate-600 rounded-lg py-3 pl-10 pr-4 text-white placeholder-slate-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                            placeholder="Enter Solana wallet address..."
-                            value={address}
-                            onChange={(e) => setAddress(e.target.value)}
-                        />
                     </div>
 
-                    <div className="flex flex-wrap gap-4">
-                        <div className="flex-1 min-w-[200px]">
-                            <label className="block text-sm text-slate-400 mb-1">Transactions to fetch</label>
+                    {/* Address Input Section */}
+                    <div className="p-6 space-y-4">
+                        <div className="relative">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <FiSearch className="text-slate-500" />
+                            </div>
                             <input
-                                type="number"
-                                className="w-full bg-slate-700 border border-slate-600 rounded-lg p-2 text-white"
-                                value={numTx}
-                                onChange={(e) => setNumTx(e.target.value)}
-                                min="1"
-                                max="100"
+                                className="w-full bg-slate-700/70 border border-slate-600/50 rounded-lg py-3 pl-10 pr-4 text-white placeholder-slate-400 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
+                                placeholder="Enter Solana wallet address (e.g., 5FHwkrdx...)"
+                                value={address}
+                                onChange={(e) => setAddress(e.target.value)}
                             />
                         </div>
-                    </div>
-                </div>
 
-                <div className="border-b border-slate-700 flex overflow-x-auto">
-                    <button onClick={() => setActiveTab('balances')} className={`px-6 py-3 font-medium ${activeTab === 'balances' ? 'text-purple-400 border-b-2 border-purple-400' : 'text-slate-400 hover:text-white'}`}>
-                        <FiDollarSign className="inline mr-2" /> Token Balances
-                    </button>
-                    <button onClick={() => setActiveTab('memecoins')} className={`px-6 py-3 font-medium ${activeTab === 'memecoins' ? 'text-purple-400 border-b-2 border-purple-400' : 'text-slate-400 hover:text-white'}`}>
-                        🐸 Memecoins
-                    </button>
-                    <button onClick={() => setActiveTab('transactions')} className={`px-6 py-3 font-medium ${activeTab === 'transactions' ? 'text-purple-400 border-b-2 border-purple-400' : 'text-slate-400 hover:text-white'}`}>
-                        📜 Transactions
-                    </button>
-                    <button onClick={() => setActiveTab('trace')} className={`px-6 py-3 font-medium ${activeTab === 'trace' ? 'text-purple-400 border-b-2 border-purple-400' : 'text-slate-400 hover:text-white'}`}>
-                        <FiShare2 className="inline mr-2" /> Trace Flow
-                    </button>
-                    <button onClick={() => setActiveTab('binance')} className={`px-6 py-3 font-medium ${activeTab === 'binance' ? 'text-purple-400 border-b-2 border-purple-400' : 'text-slate-400 hover:text-white'}`}>
-                        🏦 Binance Transfers
-                    </button>
-                </div>
-
-                <div className="p-6 flex flex-wrap gap-3">
-                    <Button variant="primary" onClick={() => callEndpoint('token-balances')} disabled={loading || !address} isLoading={loading && activeTab === 'balances'} className="min-w-[180px] flex-1">
-                        <FiDollarSign /> Scan Balances
-                    </Button>
-                    <Button variant="primary" onClick={() => callEndpoint('detect-memecoins')} disabled={loading || !address} isLoading={loading && activeTab === 'memecoins'} className="min-w-[180px] flex-1">
-                        🐸 Find Memecoins
-                    </Button>
-                    <Button variant="secondary" onClick={() => callEndpoint('transactions')} disabled={loading || !address} isLoading={loading && activeTab === 'transactions'} className="min-w-[180px] flex-1">
-                        <FiList /> View Transactions
-                    </Button>
-                    <Button variant="secondary" onClick={() => callEndpoint('trace')} disabled={loading || !address} isLoading={loading && activeTab === 'trace'} className="min-w-[180px] flex-1">
-                        <FiShare2 /> Trace Flow
-                    </Button>
-                    <Button variant="secondary" onClick={() => callEndpoint('binance-detection')} disabled={loading || !address} isLoading={loading && activeTab === 'binance'} className="min-w-[180px] flex-1">
-                        🏦 Detect Binance
-                    </Button>
-                </div>
-                {activeTab === 'transactions' && txChartData.length > 0 && (
-                    <div className="p-6">
-                        <h3 className="text-lg font-semibold mb-2">Transaction Programs Summary</h3>
-                        <div className="flex items-center justify-end mb-2">
-                            <label className="text-sm text-slate-400 mr-2">Chart Type:</label>
-                            <select value={chartType} onChange={(e) => setChartType(e.target.value as 'pie' | 'bar')} className="bg-slate-700 text-white border border-slate-600 rounded px-2 py-1 text-sm">
-                                <option value="pie">Pie</option>
-                                <option value="bar">Bar</option>
-                            </select>
-                        </div>
-                        {chartType === 'pie' ? <PieChart data={txChartData} /> : <BarChart data={txChartData} />}
-                    </div>
-                )}
-
-                {activeTab === 'balances' && tokenData.length > 0 && (
-                    <div className="mb-4">
-                        <h3 className="text-lg font-semibold mb-2">Token Distribution</h3>
-                        <div className="flex items-center justify-end mb-2">
-                            <label className="text-sm text-slate-400 mr-2">Chart Type:</label>
-                            <select value={chartType} onChange={(e) => setChartType(e.target.value as 'pie' | 'bar')} className="bg-slate-700 text-white border border-slate-600 rounded px-2 py-1 text-sm">
-                                <option value="pie">Pie</option>
-                                <option value="bar">Bar</option>
-                            </select>
-                        </div>
-                        {chartType === 'pie' ? <PieChart data={tokenData.map(({ mint, amount, symbol }) => ({ name: symbol || mint.slice(0, 6), value: amount }))} /> : <BarChart data={tokenData.map(({ mint, amount, symbol }) => ({ name: symbol || mint.slice(0, 6), value: amount }))} />}
-                        <TokenTable data={tokenData} />
-                    </div>
-                )}
-
-                {activeTab === 'binance' && binanceChartData.length > 0 && (
-                    <div className="p-6">
-                        <h3 className="text-lg font-semibold mb-2">Binance Activity Summary</h3>
-                        <div className="flex items-center justify-end mb-2">
-                            <label className="text-sm text-slate-400 mr-2">Chart Type:</label>
-                            <select value={chartType} onChange={(e) => setChartType(e.target.value as 'pie' | 'bar')} className="bg-slate-700 text-white border border-slate-600 rounded px-2 py-1 text-sm">
-                                <option value="pie">Pie</option>
-                                <option value="bar">Bar</option>
-                            </select>
-                        </div>
-                        {chartType === 'pie' ? <PieChart data={binanceChartData} /> : <BarChart data={binanceChartData} />}
-                    </div>
-                )}
-
-                {activeTab === 'trace' && traceData.length > 0 && (
-                    <TraceTable data={traceData} />
-                )}
-
-
-
-                <div className="p-6 bg-slate-900 border-t border-slate-700">
-                    <div className="flex justify-between items-center mb-3">
-                        <h2 className="font-medium">
-                            {activeTab === 'balances' && 'Token Balances'}
-                            {activeTab === 'memecoins' && 'Memecoin Detection'}
-                            {activeTab === 'transactions' && 'Transaction History'}
-                            {activeTab === 'trace' && 'Flow Trace Results'}
-                        </h2>
-                        {output?.content && (
-                            <button onClick={copyToClipboard} className="text-slate-400 hover:text-white flex items-center gap-1 text-sm">
-                                <FiCopy size={14} /> Copy
-                            </button>
-                        )}
-                    </div>
-                    <div className={`p-4 rounded-lg font-mono text-sm ${output?.type === 'error' ? 'bg-red-900/50 text-red-200' : 'bg-slate-800 text-slate-300'} overflow-auto max-h-96`}>
-                        {output ? (
-                            <pre className="whitespace-pre-wrap break-words">{output.content}</pre>
-                        ) : (
-                            <div className="text-center py-8 text-slate-500">
-                                {!address ? (
-                                    <div className="flex items-center justify-center gap-2">
-                                        <FiAlertCircle /> Enter a wallet address to begin
-                                    </div>
-                                ) : (
-                                    'Results will appear here...'
-                                )}
+                        {/* Recent Addresses */}
+                        {recentAddresses.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                                {recentAddresses.map((addr) => (
+                                    <button
+                                        key={addr}
+                                        onClick={() => handleAddressSelect(addr)}
+                                        className="text-xs bg-slate-700/50 hover:bg-slate-700 px-3 py-1 rounded-full flex items-center gap-1 transition-colors"
+                                    >
+                                        <span>{addr.slice(0, 6)}...{addr.slice(-4)}</span>
+                                    </button>
+                                ))}
                             </div>
                         )}
+
+                        <div className="flex flex-wrap gap-4">
+                            <div className="flex-1 min-w-[200px]">
+                                <label className="block text-sm text-slate-400 mb-1">Transactions to fetch (1-100)</label>
+                                <div className="relative">
+                                    <input
+                                        type="number"
+                                        className="w-full bg-slate-700/70 border border-slate-600/50 rounded-lg p-3 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                        value={numTx}
+                                        onChange={(e) => setNumTx(e.target.value)}
+                                        min="1"
+                                        max="100"
+                                    />
+                                    <div className="absolute right-3 top-3 text-slate-400 text-sm">txs</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Tabs */}
+                    <div className="border-b border-slate-700/50 flex overflow-x-auto">
+                        <button
+                            onClick={() => setActiveTab('balances')}
+                            className={`px-6 py-3 font-medium flex items-center gap-2 ${activeTab === 'balances' ? 'text-purple-400 border-b-2 border-purple-400' : 'text-slate-400 hover:text-white'}`}
+                        >
+                            <FiDollarSign /> {isMobile ? 'Balances' : 'Token Balances'}
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('memecoins')}
+                            className={`px-6 py-3 font-medium flex items-center gap-2 ${activeTab === 'memecoins' ? 'text-purple-400 border-b-2 border-purple-400' : 'text-slate-400 hover:text-white'}`}
+                        >
+                            <span className="text-yellow-400">🐸</span> {isMobile ? 'Memes' : 'Memecoins'}
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('transactions')}
+                            className={`px-6 py-3 font-medium flex items-center gap-2 ${activeTab === 'transactions' ? 'text-purple-400 border-b-2 border-purple-400' : 'text-slate-400 hover:text-white'}`}
+                        >
+                            <FiList /> {isMobile ? 'TXs' : 'Transactions'}
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('trace')}
+                            className={`px-6 py-3 font-medium flex items-center gap-2 ${activeTab === 'trace' ? 'text-purple-400 border-b-2 border-purple-400' : 'text-slate-400 hover:text-white'}`}
+                        >
+                            <FiShare2 /> {isMobile ? 'Trace' : 'Trace Flow'}
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('binance')}
+                            className={`px-6 py-3 font-medium flex items-center gap-2 ${activeTab === 'binance' ? 'text-purple-400 border-b-2 border-purple-400' : 'text-slate-400 hover:text-white'}`}
+                        >
+                            <span className="text-blue-400">🏦</span> {isMobile ? 'Binance' : 'Binance Transfers'}
+                        </button>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="p-6 grid grid-cols-2 md:grid-cols-5 gap-3">
+                        <Button
+                            variant="primary"
+                            onClick={() => callEndpoint('token-balances')}
+                            disabled={loading || !address}
+                            isLoading={loading && activeTab === 'balances'}
+                            className="flex-1 min-w-full"
+                        >
+                            <FiDollarSign /> {isMobile ? 'Balances' : 'Scan Balances'}
+                        </Button>
+                        <Button
+                            variant="primary"
+                            onClick={() => callEndpoint('detect-memecoins')}
+                            disabled={loading || !address}
+                            isLoading={loading && activeTab === 'memecoins'}
+                            className="flex-1 min-w-full"
+                        >
+                            <span className="text-yellow-400">🐸</span> {isMobile ? 'Memes' : 'Find Memecoins'}
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            onClick={() => callEndpoint('transactions')}
+                            disabled={loading || !address}
+                            isLoading={loading && activeTab === 'transactions'}
+                            className="flex-1 min-w-full"
+                        >
+                            <FiList /> {isMobile ? 'TXs' : 'View Transactions'}
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            onClick={() => callEndpoint('trace')}
+                            disabled={loading || !address}
+                            isLoading={loading && activeTab === 'trace'}
+                            className="flex-1 min-w-full"
+                        >
+                            <FiShare2 /> {isMobile ? 'Trace' : 'Trace Flow'}
+                        </Button>
+                        <Button
+                            variant="secondary"
+                            onClick={() => callEndpoint('binance-detection')}
+                            disabled={loading || !address}
+                            isLoading={loading && activeTab === 'binance'}
+                            className="flex-1 min-w-full"
+                        >
+                            <span className="text-blue-400">🏦</span> {isMobile ? 'Binance' : 'Detect Binance'}
+                        </Button>
+                    </div>
+
+                    {/* Data Visualization Section */}
+                    {activeTab === 'transactions' && txChartData.length > 0 && (
+                        <div className="p-6 bg-slate-800/30 border-t border-slate-700/30">
+                            <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-3">
+                                <h3 className="text-lg font-semibold">Transaction Programs Summary</h3>
+                                <div className="flex items-center gap-2">
+                                    <label className="text-sm text-slate-400">Chart Type:</label>
+                                    <select
+                                        value={chartType}
+                                        onChange={(e) => setChartType(e.target.value as 'pie' | 'bar')}
+                                        className="bg-slate-700 text-white border border-slate-600 rounded-lg px-3 py-1 text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                    >
+                                        <option value="pie">Pie Chart</option>
+                                        <option value="bar">Bar Chart</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/30">
+                                {chartType === 'pie' ?
+                                    <PieChart data={txChartData} /> :
+                                    <BarChart data={txChartData} />
+                                }
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'balances' && tokenData.length > 0 && (
+                        <div className="p-6 bg-slate-800/30 border-t border-slate-700/30">
+                            <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-3">
+                                <h3 className="text-lg font-semibold">Token Distribution</h3>
+                                <div className="flex items-center gap-2">
+                                    <label className="text-sm text-slate-400">Chart Type:</label>
+                                    <select
+                                        value={chartType}
+                                        onChange={(e) => setChartType(e.target.value as 'pie' | 'bar')}
+                                        className="bg-slate-700 text-white border border-slate-600 rounded-lg px-3 py-1 text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                    >
+                                        <option value="pie">Pie Chart</option>
+                                        <option value="bar">Bar Chart</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/30 mb-6">
+                                {chartType === 'pie' ? (
+                                    <PieChart data={tokenData.map(({ mint, amount, symbol }) => ({ name: symbol || mint.slice(0, 6), value: amount }))} />
+                                ) : (
+                                    <BarChart data={tokenData.map(({ mint, amount, symbol }) => ({ name: symbol || mint.slice(0, 6), value: amount }))} />
+                                )}
+                            </div>
+                            <TokenTable data={tokenData} />
+                        </div>
+                    )}
+
+                    {activeTab === 'binance' && binanceChartData.length > 0 && (
+                        <div className="p-6 bg-slate-800/30 border-t border-slate-700/30">
+                            <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-3">
+                                <h3 className="text-lg font-semibold">Binance Activity Summary</h3>
+                                <div className="flex items-center gap-2">
+                                    <label className="text-sm text-slate-400">Chart Type:</label>
+                                    <select
+                                        value={chartType}
+                                        onChange={(e) => setChartType(e.target.value as 'pie' | 'bar')}
+                                        className="bg-slate-700 text-white border border-slate-600 rounded-lg px-3 py-1 text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                    >
+                                        <option value="pie">Pie Chart</option>
+                                        <option value="bar">Bar Chart</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/30">
+                                {chartType === 'pie' ?
+                                    <PieChart data={binanceChartData} /> :
+                                    <BarChart data={binanceChartData} />
+                                }
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'trace' && traceData.length > 0 && (
+                        <div className="p-6 bg-slate-800/30 border-t border-slate-700/30">
+                            <h3 className="text-lg font-semibold mb-4">Transaction Flow Trace</h3>
+                            <TraceTable data={traceData} />
+                        </div>
+                    )}
+
+                    {/* Results Section */}
+                    <div className="p-6 bg-slate-900/50 border-t border-slate-700/50">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between mb-3 gap-3">
+                            <h2 className="font-medium text-lg">
+                                {activeTab === 'balances' && 'Token Balances'}
+                                {activeTab === 'memecoins' && 'Memecoin Detection'}
+                                {activeTab === 'transactions' && 'Transaction History'}
+                                {activeTab === 'trace' && 'Flow Trace Results'}
+                                {activeTab === 'binance' && 'Binance Interactions'}
+                            </h2>
+                            {output?.content && (
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={copyToClipboard}
+                                        className="text-slate-400 hover:text-white flex items-center gap-1 text-sm bg-slate-800/50 hover:bg-slate-700/50 px-3 py-1 rounded-lg transition-colors"
+                                    >
+                                        <FiCopy size={14} /> Copy
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                        <div className={`p-4 rounded-lg font-mono text-sm ${output?.type === 'error' ? 'bg-red-900/20 text-red-200 border border-red-800/50' : 'bg-slate-800/30 text-slate-300 border border-slate-700/30'} overflow-auto max-h-96 transition-all duration-200`}>
+                            {output ? (
+                                <pre className="whitespace-pre-wrap break-words">{output.content}</pre>
+                            ) : (
+                                <div className="text-center py-8 text-slate-500 flex flex-col items-center justify-center">
+                                    {!address ? (
+                                        <>
+                                            <FiAlertCircle className="text-2xl mb-2" />
+                                            <p>Enter a Solana wallet address to begin analysis</p>
+                                            {recentAddresses.length > 0 && (
+                                                <p className="text-sm mt-2">Or select from recent addresses above</p>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div className="animate-pulse flex flex-col items-center">
+                                                <SiSolana className="text-3xl text-purple-400 mb-2" />
+                                                <p>Ready to analyze wallet</p>
+                                                <p className="text-xs mt-1 text-purple-300">{address.slice(0, 12)}...{address.slice(-4)}</p>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Export Section */}
+                    <div className="p-6 bg-slate-900/30 border-t border-slate-700/50">
+                        <div className="flex flex-wrap gap-3 justify-center md:justify-end">
+                            <Button
+                                variant="ghost"
+                                onClick={exportToCSV}
+                                disabled={!output}
+                                className="flex items-center gap-2"
+                            >
+                                <FiDownload /> CSV
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                onClick={exportToPDF}
+                                disabled={!output}
+                                className="flex items-center gap-2"
+                            >
+                                <FiDownload /> PDF
+                            </Button>
+                            <Button
+                                variant="primary"
+                                onClick={generateFullReport}
+                                disabled={!address}
+                                className="flex items-center gap-2"
+                            >
+                                <FiDownload /> Full Report
+                            </Button>
+                        </div>
                     </div>
                 </div>
 
-                <div className="flex gap-2 justify-end px-6 pb-6">
-                    <Button variant="ghost" onClick={exportToCSV} disabled={!output}>📄 Export CSV</Button>
-                    <Button variant="ghost" onClick={exportToPDF} disabled={!output}>🖨 Export PDF</Button>
-                    <Button variant="ghost" onClick={generateFullReport} disabled={!address}>🧾 Export Full Report</Button>
-
+                {/* Footer */}
+                <div className="mt-8 text-center text-slate-500 text-sm">
+                    <p>Solana Wallet Inspector • Not affiliated with Solana Labs</p>
+                    <p className="mt-1">Data is read-only and never stored</p>
                 </div>
             </div>
         </div>
