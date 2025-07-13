@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { Button } from './ui/Button';
 import { FiCopy, FiExternalLink, FiSearch, FiDollarSign, FiAlertCircle, FiList, FiShare2, FiRefreshCw, FiDownload } from 'react-icons/fi';
-import { FaEthereum, FaBitcoin } from 'react-icons/fa';
 import { SiSolana } from 'react-icons/si';
 import toast from 'react-hot-toast';
 import jsPDF from 'jspdf';
@@ -11,13 +10,14 @@ import PieChart from './PieChart';
 import BarChart from './BarChart';
 import TokenTable from './TokenTable';
 import TraceTable from './TraceTable';
+import { GhostTokenTable } from './GhostTokenTable';
 
 export default function SolanaToolUI() {
     const [address, setAddress] = useState('');
     const [numTx, setNumTx] = useState('10');
     const [output, setOutput] = useState<{ type: 'success' | 'error'; content: string } | null>(null);
     const [loading, setLoading] = useState(false);
-    const [activeTab, setActiveTab] = useState<'balances' | 'memecoins' | 'transactions' | 'trace' | 'binance'>('balances');
+    const [activeTab, setActiveTab] = useState<'balances' | 'memecoins' | 'transactions' | 'trace' | 'binance' | 'ghost' | 'cluster'>('balances');
     const [tokenData, setTokenData] = useState<any[]>([]);
     const [chartType, setChartType] = useState<'pie' | 'bar'>('pie');
     const [txChartData, setTxChartData] = useState<{ name: string; value: number }[]>([]);
@@ -25,6 +25,31 @@ export default function SolanaToolUI() {
     const [traceData, setTraceData] = useState<any[]>([]);
     const [recentAddresses, setRecentAddresses] = useState<string[]>([]);
     const [isMobile, setIsMobile] = useState(false);
+    const [ghostData, setGhostData] = useState<any[]>([]);
+
+
+    useEffect(() => {
+        if (activeTab === 'ghost' && address) {
+            (async () => {
+                setLoading(true);
+                try {
+                    const res = await fetch(`/api/ghost-tokens?address=${address}`);
+                    const json = await res.json();
+                    if (res.ok) {
+                        setGhostData(json.result || []);
+                        setOutput({ type: 'success', content: `Found ${json.result.length} ghost tokens.` });
+                    } else {
+                        throw new Error(json.error || 'Unknown error');
+                    }
+                } catch (err: any) {
+                    setOutput({ type: 'error', content: `Ghost token fetch failed: ${err.message}` });
+                } finally {
+                    setLoading(false);
+                }
+            })();
+        }
+    }, [activeTab, address]);
+
 
     useEffect(() => {
         const handleResize = () => {
@@ -140,6 +165,9 @@ export default function SolanaToolUI() {
                     setOutput({ type: 'success', content: `🔍 Traced ${data.result.length} transactions.` });
                     setTraceData(data.result);
                     setTokenData([]);
+                } else if (endpoint === 'cluster-wallets') {
+                    setOutput({ type: 'success', content: JSON.stringify(data.result, null, 2) });
+                    // Optionally set state like setClusterData(data.result)
                 } else if (endpoint === 'binance-detection') {
                     const { receivedFromBinance, sentToBinance, totalInteractions } = data.result;
 
@@ -172,8 +200,6 @@ export default function SolanaToolUI() {
                 } else {
                     setOutput({ type: 'success', content: JSON.stringify(data.result, null, 2) });
                 }
-            } else {
-                setOutput({ type: 'error', content: `Error: ${data.error}` });
             }
         } catch (err: any) {
             setOutput({ type: 'error', content: `Network Error: ${err.message}` });
@@ -362,7 +388,6 @@ export default function SolanaToolUI() {
                         </div>
                     </div>
                 </div>
-
                 {/* Main Card */}
                 <div className="bg-slate-800/80 rounded-xl shadow-2xl overflow-hidden border border-slate-700/50 backdrop-blur-sm">
                     {/* Card Header */}
@@ -475,7 +500,20 @@ export default function SolanaToolUI() {
                         >
                             <span className="text-blue-400">🏦</span> {isMobile ? 'Binance' : 'Binance Transfers'}
                         </button>
+                        <button
+                            onClick={() => setActiveTab('ghost')}
+                            className={`px-6 py-3 font-medium flex items-center gap-2 ${activeTab === 'ghost' ? 'text-purple-400 border-b-2 border-purple-400' : 'text-slate-400 hover:text-white'}`}
+                        >
+                            <span className="text-blue-400">👻</span>  {isMobile ? 'Ghost' : 'Ghost Tokens'}
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('cluster')}
+                            className={`px-6 py-3 font-medium flex items-center gap-2 ${activeTab === 'cluster' ? 'text-purple-400 border-b-2 border-purple-400' : 'text-slate-400 hover:text-white'}`}
+                        >
+                            <span className="text-blue-400">🤖</span>  {isMobile ? 'clusters' : 'Cluster Wallets'}
+                        </button>
                     </div>
+
 
                     {/* Action Buttons */}
                     <div className="p-6 grid grid-cols-2 md:grid-cols-5 gap-3">
@@ -498,7 +536,7 @@ export default function SolanaToolUI() {
                             <span className="text-yellow-400">🐸</span> {isMobile ? 'Memes' : 'Find Memecoins'}
                         </Button>
                         <Button
-                            variant="secondary"
+                            variant="primary"
                             onClick={() => callEndpoint('transactions')}
                             disabled={loading || !address}
                             isLoading={loading && activeTab === 'transactions'}
@@ -507,7 +545,7 @@ export default function SolanaToolUI() {
                             <FiList /> {isMobile ? 'TXs' : 'View Transactions'}
                         </Button>
                         <Button
-                            variant="secondary"
+                            variant="primary"
                             onClick={() => callEndpoint('trace')}
                             disabled={loading || !address}
                             isLoading={loading && activeTab === 'trace'}
@@ -516,7 +554,7 @@ export default function SolanaToolUI() {
                             <FiShare2 /> {isMobile ? 'Trace' : 'Trace Flow'}
                         </Button>
                         <Button
-                            variant="secondary"
+                            variant="primary"
                             onClick={() => callEndpoint('binance-detection')}
                             disabled={loading || !address}
                             isLoading={loading && activeTab === 'binance'}
@@ -524,6 +562,17 @@ export default function SolanaToolUI() {
                         >
                             <span className="text-blue-400">🏦</span> {isMobile ? 'Binance' : 'Detect Binance'}
                         </Button>
+                        <Button
+                            variant="primary"
+                            onClick={() => callEndpoint('cluster-wallets')}
+                            disabled={loading || !address}
+                            isLoading={loading && activeTab === 'cluster'}
+                            className="flex-1 min-w-full"
+                        >
+                            <span className="text-blue-400">🧠</span> {isMobile ? 'Clusters' : 'Cluster Wallets'}
+
+                        </Button>
+
                     </div>
 
                     {/* Data Visualization Section */}
@@ -611,6 +660,13 @@ export default function SolanaToolUI() {
                         </div>
                     )}
 
+                    {activeTab === 'ghost' && (
+                        <div className="p-6 bg-slate-800/30 border-t border-slate-700/30">
+                            <h3 className="text-lg font-semibold mb-4">Ghost Token Awakening Detection</h3>
+                            <GhostTokenTable data={ghostData} />
+                        </div>
+                    )}
+
                     {/* Results Section */}
                     <div className="p-6 bg-slate-900/50 border-t border-slate-700/50">
                         <div className="flex flex-col md:flex-row md:items-center justify-between mb-3 gap-3">
@@ -620,6 +676,7 @@ export default function SolanaToolUI() {
                                 {activeTab === 'transactions' && 'Transaction History'}
                                 {activeTab === 'trace' && 'Flow Trace Results'}
                                 {activeTab === 'binance' && 'Binance Interactions'}
+                                {activeTab === 'cluster' && 'Cluster Wallets Detection'}
                             </h2>
                             {output?.content && (
                                 <div className="flex gap-2">

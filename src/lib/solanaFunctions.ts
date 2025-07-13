@@ -1,4 +1,4 @@
-import { Connection, PublicKey } from '@solana/web3.js';
+import { Connection, PublicKey, ParsedConfirmedTransaction } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { BINANCE_WALLETS } from './binanceWallets';
 
@@ -221,6 +221,99 @@ export async function detectBinanceActivity(address: string) {
         totalInteractions: receivedFromBinance.length + sentToBinance.length,
     };
 }
+
+
+const DORMANT_DAYS = 7;
+const MAX_TRANSACTIONS = 1000;
+
+export async function detectGhostTokenAwakenings(walletAddress: string, solanaConnection: Connection) {
+    const walletPubkey = new PublicKey(walletAddress);
+    const now = new Date();
+    const ghostAwakenings: any[] = [];
+
+    const tokenAccounts = await solanaConnection.getParsedTokenAccountsByOwner(walletPubkey, {
+        programId: TOKEN_PROGRAM_ID,
+    });
+
+    for (const accountInfo of tokenAccounts.value) {
+        const mint = accountInfo.account.data.parsed.info.mint;
+        const tokenPubkey = new PublicKey(mint);
+
+        const signatures = await solanaConnection.getSignaturesForAddress(tokenPubkey, { limit: MAX_TRANSACTIONS });
+        if (signatures.length < 2) continue;
+
+        const transactions: ParsedConfirmedTransaction[] = [];
+        for (const sig of signatures) {
+            const tx = await solanaConnection.getParsedTransaction(sig.signature, 'confirmed');
+            if (tx) transactions.push(tx);
+        }
+
+        const sortedTx = transactions
+            .filter(tx => tx?.blockTime)
+            .sort((a, b) => (a.blockTime! - b.blockTime!));
+
+        if (sortedTx.length < 2) continue;
+
+        const secondLastTx = sortedTx[sortedTx.length - 2];
+        const lastTx = sortedTx[sortedTx.length - 1];
+
+        const lastTime = new Date((lastTx.blockTime || 0) * 1000);
+        const prevTime = new Date((secondLastTx.blockTime || 0) * 1000);
+
+        const diffDays = Math.floor((lastTime.getTime() - prevTime.getTime()) / (1000 * 60 * 60 * 24));
+
+        if (diffDays >= DORMANT_DAYS) {
+            const instructions = lastTx.transaction.message.instructions;
+            let from = '';
+            let to = '';
+            let amount = '';
+
+            for (const ix of instructions) {
+                if ('parsed' in ix && ix.parsed?.type === 'transfer') {
+                    from = ix.parsed.info.source;
+                    to = ix.parsed.info.destination;
+                    amount = ix.parsed.info.amount;
+                }
+            }
+
+            ghostAwakenings.push({
+                mint,
+                daysDormant: diffDays,
+                awakenedAt: lastTime.toISOString(),
+                recentTransferAmount: amount,
+                from,
+                to,
+            });
+        }
+    }
+
+    return ghostAwakenings;
+}
+
+
+export async function getClusteredWallets(walletAddress: string, solanaConnection: Connection) {
+    const addressSet = new Set<string>();
+    addressSet.add(walletAddress);
+
+    const walletPubkey = new PublicKey(walletAddress);
+    const signatures = await solanaConnection.getSignaturesForAddress(walletPubkey, { limit: 100 });
+
+    for (const sig of signatures) {
+        const tx = await solanaConnection.getParsedTransaction(sig.signature, 'confirmed');
+        if (!tx) continue;
+
+        for (const ix of tx.transaction.message.instructions) {
+            if ('parsed' in ix) {
+                const info = ix.parsed.info;
+                if (info.source) addressSet.add(info.source);
+                if (info.destination) addressSet.add(info.destination);
+            }
+        }
+    }
+
+    return Array.from(addressSet);
+}
+
 
 
 
