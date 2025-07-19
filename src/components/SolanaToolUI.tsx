@@ -11,13 +11,14 @@ import BarChart from './BarChart';
 import TokenTable from './TokenTable';
 import TraceTable from './TraceTable';
 import { GhostTokenTable } from './GhostTokenTable';
+import ClusterGraph from './ClusterGraph';
 
 export default function SolanaToolUI() {
     const [address, setAddress] = useState('');
     const [numTx, setNumTx] = useState('10');
     const [output, setOutput] = useState<{ type: 'success' | 'error'; content: string } | null>(null);
     const [loading, setLoading] = useState(false);
-    const [activeTab, setActiveTab] = useState<'balances' | 'memecoins' | 'transactions' | 'trace' | 'binance' | 'ghost' | 'cluster'>('balances');
+    const [activeTab, setActiveTab] = useState<'balances' | 'memecoins' | 'transactions' | 'trace' | 'binance' | 'ghost'| 'cluster-wallets' | 'cluster'>('balances');
     const [tokenData, setTokenData] = useState<any[]>([]);
     const [chartType, setChartType] = useState<'pie' | 'bar'>('pie');
     const [txChartData, setTxChartData] = useState<{ name: string; value: number }[]>([]);
@@ -26,6 +27,7 @@ export default function SolanaToolUI() {
     const [recentAddresses, setRecentAddresses] = useState<string[]>([]);
     const [isMobile, setIsMobile] = useState(false);
     const [ghostData, setGhostData] = useState<any[]>([]);
+    const [clusterData, setClusterData] = useState<any>(null);
 
 
     useEffect(() => {
@@ -168,6 +170,10 @@ export default function SolanaToolUI() {
                 } else if (endpoint === 'cluster-wallets') {
                     setOutput({ type: 'success', content: JSON.stringify(data.result, null, 2) });
                     // Optionally set state like setClusterData(data.result)
+                } else if (endpoint === 'cluster') {
+                    setOutput({ type: 'success', content: `🧠 Clustered ${data.result.nodes.length} wallets.` });
+                    setClusterData(data.result);
+                    setTokenData([]);
                 } else if (endpoint === 'binance-detection') {
                     const { receivedFromBinance, sentToBinance, totalInteractions } = data.result;
 
@@ -507,11 +513,18 @@ export default function SolanaToolUI() {
                             <span className="text-blue-400">👻</span>  {isMobile ? 'Ghost' : 'Ghost Tokens'}
                         </button>
                         <button
+                            onClick={() => setActiveTab('cluster-wallets')}
+                            className={`px-6 py-3 font-medium flex items-center gap-2 ${activeTab === 'cluster-wallets' ? 'text-purple-400 border-b-2 border-purple-400' : 'text-slate-400 hover:text-white'}`}
+                        >
+                            <span className="text-blue-400">🤖</span>  {isMobile ? 'cluster wx' : 'Cluster Wallets'}
+                        </button>
+                        <button
                             onClick={() => setActiveTab('cluster')}
                             className={`px-6 py-3 font-medium flex items-center gap-2 ${activeTab === 'cluster' ? 'text-purple-400 border-b-2 border-purple-400' : 'text-slate-400 hover:text-white'}`}
                         >
-                            <span className="text-blue-400">🤖</span>  {isMobile ? 'clusters' : 'Cluster Wallets'}
+                            <span className="text-blue-400">🧠</span>{isMobile ? 'Cluster' : 'Smart Clustering'}
                         </button>
+
                     </div>
 
 
@@ -560,7 +573,7 @@ export default function SolanaToolUI() {
                             isLoading={loading && activeTab === 'binance'}
                             className="flex-1 min-w-full"
                         >
-                            <span className="text-blue-400">🏦</span> {isMobile ? 'Binance' : 'Detect Binance'}
+                            <span className="text-blue-400">🏦</span> {isMobile ? 'Binance' : 'Detect Binance Tx'}
                         </Button>
                         <Button
                             variant="primary"
@@ -569,7 +582,7 @@ export default function SolanaToolUI() {
                             isLoading={loading && activeTab === 'cluster'}
                             className="flex-1 min-w-full"
                         >
-                            <span className="text-blue-400">🧠</span> {isMobile ? 'Clusters' : 'Cluster Wallets'}
+                            <span className="text-blue-400">🤖</span> {isMobile ? 'Clusters' : 'Cluster Wallets'}
 
                         </Button>
 
@@ -666,6 +679,14 @@ export default function SolanaToolUI() {
                             <GhostTokenTable data={ghostData} />
                         </div>
                     )}
+
+                    {activeTab === 'cluster' && clusterData && (
+                        <div className="p-6 bg-slate-800/30 border-t border-slate-700/30">
+                            <h3 className="text-lg font-semibold mb-4">Wallet Clustering Graph</h3>
+                            <ClusterGraph data={clusterData} />
+                        </div>
+                    )}
+
 
                     {/* Results Section */}
                     <div className="p-6 bg-slate-900/50 border-t border-slate-700/50">

@@ -8,7 +8,7 @@ import { BINANCE_WALLETS } from './binanceWallets';
 // }
 
 
-const RPC_ENDPOINT = process.env.NEXT_PUBLIC_QUIKNODE_RPC!;
+const RPC_ENDPOINT = process.env.NEXT_PUBLIC_ALCHEMY_M_API!;
 export const solanaConnection = new Connection(RPC_ENDPOINT);
 
 
@@ -313,6 +313,23 @@ export async function getClusteredWallets(walletAddress: string, solanaConnectio
 
     return Array.from(addressSet);
 }
+
+
+export async function clusterWallets(address: string) {
+    // Example dummy clusters (replace with real logic later)
+    return {
+        nodes: [
+            { id: address, group: 1 },
+            { id: 'WalletA', group: 1 },
+            { id: 'WalletB', group: 2 },
+        ],
+        links: [
+            { source: address, target: 'WalletA' },
+            { source: address, target: 'WalletB' },
+        ]
+    };
+}
+
 
 
 
